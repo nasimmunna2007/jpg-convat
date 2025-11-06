@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nasim Munna TOOLS - JPG & SVG Converter</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+</head>
+<body class="bg-gray-50 min-h-screen p-6 font-sans flex flex-col items-center">
+
+  <h1 class="text-4xl font-bold mb-8 text-green-600">Nasim Munna TOOLS</h1>
+  <h2 class="text-xl mb-6 text-gray-700 text-center max-w-xl">একসাথে ছবি আপলোড করে <span class="font-semibold">JPG</span> অথবা <span class="font-semibold">SVG</span> এ কনভার্ট করুন এবং আলাদা বা একসাথে ডাউনলোড করুন</h2>
+
+  <input
+    id="fileInput"
+    type="file"
+    multiple
+    accept="image/*"
+    class="mb-6 border-2 border-dashed border-green-400 rounded-lg p-4 max-w-xl w-full cursor-pointer"
+  />
+
+  <div id="imagesContainer" class="max-w-5xl w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8"></div>
+
+  <div class="flex gap-4">
+    <button id="convertAllJPG" class="bg-green-600 hover:bg-green-700 text-white py-3 px-6 rounded disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+      সব JPG এ কনভার্ট করুন
+    </button>
+    <button id="convertAllSVG" class="bg-blue-600 hover:bg-blue-700 text-white py-3 px-6 rounded disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+      সব SVG এ কনভার্ট করুন
+    </button>
+  </div>
+
+  <h3 class="text-2xl font-semibold mt-10 mb-4 text-gray-800">কনভার্ট করা ছবি</h3>
+  <div id="convertedList" class="max-w-5xl w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+
+<script>
+  const fileInput = document.getElementById('fileInput');
+  const imagesContainer = document.getElementById('imagesContainer');
+  const convertedList = document.getElementById('convertedList');
+  const convertAllJPG = document.getElementById('convertAllJPG');
+  const convertAllSVG = document.getElementById('convertAllSVG');
+
+  let images = [];  // { file, url, convertedJPG, convertedSVG }
+
+  fileInput.addEventListener('change', (e) => {
+    images = [];
+    imagesContainer.innerHTML = '';
+    convertedList.innerHTML = '';
+
+    const files = Array.from(e.target.files);
+    if(files.length === 0) {
+      convertAllJPG.disabled = true;
+      convertAllSVG.disabled = true;
+      return;
+    }
+
+    files.forEach((file, idx) => {
+      const url = URL.createObjectURL(file);
+      const imageObj = { file, url, convertedJPG: null, convertedSVG: null };
+      images.push(imageObj);
+
+      const card = document.createElement('div');
+      card.className = "bg-white rounded-lg shadow-md p-3 flex flex-col items-center";
+
+      const imgEl = document.createElement('img');
+      imgEl.src = url;
+      imgEl.alt = file.name;
+      imgEl.className = "w-full h-40 object-contain rounded-md mb-3";
+
+      const nameEl = document.createElement('p');
+      nameEl.textContent = file.name;
+      nameEl.className = "text-sm text-gray-700 truncate w-full text-center mb-3";
+
+      // Buttons container
+      const btnContainer = document.createElement('div');
+      btnContainer.className = "flex gap-2 flex-wrap justify-center";
+
+      // Convert JPG button
+      const btnJPG = document.createElement('button');
+      btnJPG.textContent = "Convert to JPG";
+      btnJPG.className = "bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded text-xs";
+      btnJPG.onclick = async () => {
+        btnJPG.disabled = true;
+        await convertToJPG(imageObj);
+        btnJPG.disabled = false;
+      };
+
+      // Convert SVG button
+      const btnSVG = document.createElement('button');
+      btnSVG.textContent = "Convert to SVG";
+      btnSVG.className = "bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 rounded text-xs";
+      btnSVG.onclick = async () => {
+        btnSVG.disabled = true;
+        await convertToSVG(imageObj);
+        btnSVG.disabled = false;
+      };
+
+      // Download button
+      const btnDownload = document.createElement('button');
+      btnDownload.textContent = "Download";
+      btnDownload.className = "bg-gray-600 hover:bg-gray-700 text-white py-1 px-3 rounded text-xs";
+      btnDownload.disabled = true; // initially disabled
+
+      btnDownload.onclick = () => {
+        if (imageObj.convertedJPG) {
+          downloadBlob(imageObj.convertedJPG.blob, imageObj.convertedJPG.name);
+        } else if (imageObj.convertedSVG) {
+          downloadBlob(imageObj.convertedSVG.blob, imageObj.convertedSVG.name);
+        } else {
+          alert("Please convert the image first.");
+        }
+      };
+
+      btnContainer.appendChild(btnJPG);
+      btnContainer.appendChild(btnSVG);
+      btnContainer.appendChild(btnDownload);
+
+      card.appendChild(imgEl);
+      card.appendChild(nameEl);
+      card.appendChild(btnContainer);
+
+      imagesContainer.appendChild(card);
+    });
+
+    convertAllJPG.disabled = false;
+    convertAllSVG.disabled = false;
+  });
+
+  async function convertToJPG(imageObj) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+
+        canvas.toBlob((blob) => {
+          imageObj.convertedJPG = { blob, name: imageObj.file.name.replace(/\.[^/.]+$/, "") + '.jpg' };
+          addToConvertedList(imageObj, 'jpg');
+          updateDownloadButton(imageObj);
+          resolve();
+        }, 'image/jpeg', 0.95);
+      };
+      img.onerror = () => {
+        alert("Image load failed: " + imageObj.file.name);
+        resolve();
+      };
+
+      // Use FileReader for local files
+      const reader = new FileReader();
+      reader.onload = e => img.src = e.target.result;
+      reader.readAsDataURL(imageObj.file);
+    });
+  }
+
+  async function convertToSVG(imageObj) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const svgText = imageToSVG(e.target.result, imageObj.file.name);
+          const blob = new Blob([svgText], { type: "image/svg+xml" });
+          imageObj.convertedSVG = { blob, name: imageObj.file.name.replace(/\.[^/.]+$/, "") + '.svg' };
+          addToConvertedList(imageObj, 'svg');
+          updateDownloadButton(imageObj);
+        } catch(err) {
+          alert('SVG conversion failed for ' + imageObj.file.name);
+        }
+        resolve();
+      };
+      reader.onerror = () => {
+        alert("File read failed: " + imageObj.file.name);
+        resolve();
+      };
+      reader.readAsDataURL(imageObj.file);
+    });
+  }
+
+  // Simple SVG wrapper with embedded image (note: actual vectorization is very complex)
+  function imageToSVG(dataUrl, name) {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 800 600" version="1.1">
+  <image href="${dataUrl}" height="100%" width="100%"/>
+</svg>`;
+  }
+
+ function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+
+  // ক্লিক করার পরে DOM থেকে সরানোর জন্য
+  a.addEventListener('click', () => {
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    a.remove();
+  });
+
+  a.click();
+}
+
+
+  function updateDownloadButton(imageObj) {
+    const idx = images.indexOf(imageObj);
+    if(idx === -1) return;
+    const card = imagesContainer.children[idx];
+    const btnDownload = card.querySelector('button.bg-gray-600');
+    btnDownload.disabled = false;
+  }
+
+  function addToConvertedList(imageObj, format) {
+    // Check if already exists in convertedList, if yes update; else add
+    const existing = Array.from(convertedList.children).find(div => div.dataset.filename === imageObj.file.name + '_' + format);
+    if (existing) return; // no duplicates
+
+    const div = document.createElement('div');
+    div.dataset.filename = imageObj.file.name + '_' + format;
+    div.className = "bg-white rounded-lg shadow-md p-3 flex flex-col items-center";
+
+    const url = URL.createObjectURL(format === 'jpg' ? imageObj.convertedJPG.blob : imageObj.convertedSVG.blob);
+    const ext = format.toUpperCase();
+
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = `${imageObj.file.name} converted to ${ext}`;
+    img.className = "w-full h-40 object-contain rounded-md mb-3";
+
+    const p = document.createElement('p');
+    p.textContent = `${imageObj.file.name} → ${ext}`;
+    p.className = "text-sm text-gray-700 truncate w-full text-center";
+
+    const btn = document.createElement('button');
+    btn.textContent = `Download ${ext}`;
+    btn.className = "bg-indigo-600 hover:bg-indigo-700 text-white py-1 px-4 rounded text-sm";
+    btn.onclick = () => downloadBlob(format === 'jpg' ? imageObj.convertedJPG.blob : imageObj.convertedSVG.blob, imageObj.file.name.replace(/\.[^/.]+$/, "") + `.${format}`);
+
+    div.appendChild(img);
+    div.appendChild(p);
+    div.appendChild(btn);
+
+    convertedList.appendChild(div);
+  }
+
+  convertAllJPG.addEventListener('click', async () => {
+    convertAllJPG.disabled = true;
+    convertAllSVG.disabled = true;
+
+    for(const img of images) {
+      if (!img.convertedJPG) await convertToJPG(img);
+    }
+
+    convertAllJPG.disabled = false;
+    convertAllSVG.disabled = false;
+  });
+
+  convertAllSVG.addEventListener('click', async () => {
+    convertAllJPG.disabled = true;
+    convertAllSVG.disabled = true;
+
+    for(const img of images) {
+      if (!img.convertedSVG) await convertToSVG(img);
+    }
+
+    convertAllJPG.disabled = false;
+    convertAllSVG.disabled = false;
+  });
+</script>
+
+</body>
+</html>
+
+
